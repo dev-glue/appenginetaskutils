@@ -1,6 +1,8 @@
-from google.appengine.ext import ndb
-from flask import request, render_template
 import json
+
+from flask import request, render_template
+from google.appengine.ext import ndb
+
 
 def get_report(app):
     @app.route('/report')
@@ -10,18 +12,19 @@ def get_report(app):
         if keystr:
             key = ndb.Key(urlsafe=keystr)
             obj = key.get()
-            def futuremap(future, flevel):
+
+            def future_map(future, flevel):
                 if future:
                     urlsafe = future.key.urlsafe()
                     return "<a href='report?key=%s&level=%s'>%s</a>" % (urlsafe, flevel, urlsafe)
                 else:
                     return None
-                
-            objjson = obj.to_dict(level = level, maxlevel = level + 5, futuremapf = futuremap)
+
+            obj_json = obj.to_dict(level=level, max_level=level + 5, future_map_fn=future_map)
             return render_template(
-                "report.html", 
-                objjson = json.dumps(objjson, indent=2, sort_keys=True),
-                keystr = keystr
+                "report.html",
+                objjson=json.dumps(obj_json, indent=2, sort_keys=True),
+                keystr=keystr
             )
         else:
             return render_template(
@@ -29,4 +32,3 @@ def get_report(app):
             )
 
     return report
-

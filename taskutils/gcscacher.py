@@ -7,7 +7,8 @@ from taskutils.util import get_utcnow_unixtimestampusec, logdebug
 import pickle
 import cloudpickle
 
-def gcscacher(f, bucketname=None, cachekey=None, expiresec = None):
+
+def gcscacher(f, bucketname=None, cachekey=None, expiresec=None):
     if not f:
         return functools.partial(gcscacher, expiresec=expiresec)
 
@@ -16,21 +17,21 @@ def gcscacher(f, bucketname=None, cachekey=None, expiresec = None):
         logdebug("Enter gcscacher.getvalue: %s" % key)
 
         bucket = bucketname if bucketname else os.environ.get(
-                                                        'BUCKET_NAME',
-                                                    app_identity.get_default_gcs_bucket_name())
-        
+            'BUCKET_NAME',
+            app_identity.get_default_gcs_bucket_name())
+
         lpicklepath = "/%s/gcscache/%s.pickle" % (bucket, key)
 
         logdebug("picklepath: %s" % lpicklepath)
 
         lsaved = None
         try:
-            #1: Get the meta info
+            # 1: Get the meta info
             with gcs.open(lpicklepath) as picklefile:
                 lsaved = pickle.load(picklefile)
         except gcs.NotFoundError:
             pass
-        
+
         lexpireat = lsaved.get("expireat") if lsaved else None
         lcontent = None
         lcacheIsValid = False
@@ -56,4 +57,3 @@ def gcscacher(f, bucketname=None, cachekey=None, expiresec = None):
         return lcontent
 
     return getvalue
-    

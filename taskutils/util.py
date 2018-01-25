@@ -1,48 +1,57 @@
-import time
 import datetime
 import logging
+import time
 import types
+
 import cloudpickle
+
 import taskutils
+
 
 def datetime_to_unixtimestampusec(aDateTime):
     return long(time.mktime(aDateTime.timetuple()) * 1000000 + aDateTime.microsecond) if aDateTime else 0
 
+
 def get_utcnow_unixtimestampusec():
     return datetime_to_unixtimestampusec(datetime.datetime.utcnow())
+
 
 def logdebug(message):
     if taskutils.get_logging():
         logging.debug(message)
-        
+
+
 def logwarning(message):
     if taskutils.get_logging():
         logging.warning(message)
+
 
 def logexception(message):
     if taskutils.get_logging():
         logging.exception(message)
 
+
 def get_dump():
     return taskutils.get_dump()
+
 
 def dumper(thing):
     if taskutils.get_dump():
         def printf(f, indent, foundf):
-            logdebug("%s [%s] %s" % ("#" * (indent+1), len(cloudpickle.dumps(f)), f))
-            logdebug("%s code size = %s" % ("#" * (indent+1), len(cloudpickle.dumps(f.func_code))))
-#             print "%s closure size = %s" % ("#" * indent, len(cloudpickle.dumps(f.func_closure)))
-            dodumpclosure(f, (indent+1), foundf + [f])
-                    
+            logdebug("%s [%s] %s" % ("#" * (indent + 1), len(cloudpickle.dumps(f)), f))
+            logdebug("%s code size = %s" % ("#" * (indent + 1), len(cloudpickle.dumps(f.func_code))))
+            #             print "%s closure size = %s" % ("#" * indent, len(cloudpickle.dumps(f.func_closure)))
+            dodumpclosure(f, (indent + 1), foundf + [f])
+
         def printi(arg, indent):
-            logdebug("%s [%s] %s" % ("#" * (indent+1), len(cloudpickle.dumps(arg)), arg))
+            logdebug("%s [%s] %s" % ("#" * (indent + 1), len(cloudpickle.dumps(arg)), arg))
 
         def printlen(obj, indent):
-            logdebug("%s [%s] %s" % ("#" * (indent+1), len(obj), type(obj)))
-    
+            logdebug("%s [%s] %s" % ("#" * (indent + 1), len(obj), type(obj)))
+
         def printmsg(msg, indent):
-            logdebug("%s %s" % ("*" * (indent+1), msg))
-    
+            logdebug("%s %s" % ("*" * (indent + 1), msg))
+
         def dodumpitem(item, indent, foundf):
             if isinstance(item, types.FunctionType):
                 printf(item, indent, foundf)
@@ -50,19 +59,19 @@ def dumper(thing):
                 printlen(item, indent)
                 for key, value in item.iteritems():
                     printmsg(key, indent)
-                    dodumpitem(value, indent+1, foundf)
+                    dodumpitem(value, indent + 1, foundf)
             elif isinstance(item, (list, set, tuple)):
                 printlen(item, indent)
                 for index, elem in enumerate(item):
                     printmsg(index, indent)
-                    dodumpitem(elem, indent+1, foundf)
+                    dodumpitem(elem, indent + 1, foundf)
             else:
-                printi(item, indent) # not a function
-    
+                printi(item, indent)  # not a function
+
         def dodumpclosure(f, indent, foundf):
             if f.func_closure:
                 cells = [lcell for lcell in f.func_closure]
-                for cell in cells: #[lcell.cell_contents for lcell in f.func_closure]:
+                for cell in cells:  # [lcell.cell_contents for lcell in f.func_closure]:
                     try:
                         item = cell.cell_contents
                         if isinstance(item, types.FunctionType):
@@ -78,8 +87,8 @@ def dumper(thing):
                         printmsg(repr(vex), indent)
             else:
                 printmsg("null closure", indent)
- 
-        try:   
+
+        try:
             dodumpitem(thing, 0, [])
         except Exception:
             logexception("dumper failed")

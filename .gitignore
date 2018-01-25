@@ -92,4 +92,5 @@ ENV/
 .project
 *~
 .settings
+.idea/
 

@@ -1,24 +1,29 @@
-'''
+"""
 Created on 26Jul.,2017
 
 @author: emlyn
-'''
+"""
+
+import functools
+import hashlib
+from datetime import datetime, timedelta
 
 from google.appengine.api import memcache
-from datetime import datetime, timedelta
-import hashlib
+
 from task import task
-import functools
 from taskutils.flash import make_flash
 from taskutils.util import logdebug
+
 
 def GenerateStableId(instring):
     return hashlib.md5(instring).hexdigest()
 
-def debouncedtask(f=None, initsec = 0, repeatsec = 10, debouncename = None, **taskkwargs):
+
+def debouncedtask(f=None, initsec=0, repeatsec=10, debouncename=None, **taskkwargs):
     if not f:
-        return functools.partial(debouncedtask, initsec = initsec, repeatsec = repeatsec, debouncename = debouncename, **taskkwargs)
-    
+        return functools.partial(debouncedtask, initsec=initsec, repeatsec=repeatsec, debouncename=debouncename,
+                                 **taskkwargs)
+
     @functools.wraps(f)
     def rundebouncedtask(*args, **kwargs):
         logdebug("x enter rundebouncedtask")
@@ -54,18 +59,18 @@ def debouncedtask(f=None, initsec = 0, repeatsec = 10, debouncename = None, **ta
                 else:
                     # eta is in the future, but too close for initsec. Need to schedule another full repeatsec ahead
                     futuresectd = eta - now
-                    futuresec = futuresectd.total_seconds() # number of seconds in the future that we're scheduled to run
-                    countdown = futuresec + repeatsec # let's schedule ahead one more repeat after that
-        
+                    futuresec = futuresectd.total_seconds()  # number of seconds in the future that we're scheduled to run
+                    countdown = futuresec + repeatsec  # let's schedule ahead one more repeat after that
+
                 if countdown < initsec:
-                    countdown = initsec # don't schedule anything closer than initsec to now.
-    
+                    countdown = initsec  # don't schedule anything closer than initsec to now.
+
                 logdebug("countdown: %s" % countdown)
-                
+
                 nexteta = now + timedelta(seconds=countdown)
-                
+
                 logdebug("nexteta: %s" % nexteta)
-    
+
                 if eta is None:
                     casresult = client.add(cachekey, nexteta)
                 else:
@@ -73,27 +78,30 @@ def debouncedtask(f=None, initsec = 0, repeatsec = 10, debouncename = None, **ta
                 logdebug("CAS result: %s" % casresult)
                 if casresult or tries == maxtries:
                     if tries == maxtries:
-                        logdebug("We got to maxtries in debounce, something screwy re: memcache. Better just call the function")
-                        
+                        logdebug(
+                            "We got to maxtries in debounce, something screwy re: memcache. Better just call the function")
+
                     logdebug("B")
-                    
+
                     taskkwargscopy = dict(taskkwargs)
                     if "countdown" in taskkwargscopy:
                         del taskkwargscopy["countdown"]
                     if "eta" in taskkwargscopy:
                         del taskkwargscopy["eta"]
                     taskkwargscopy["countdown"] = countdown
-                    retval = task(f, **taskkwargscopy)(*args, **kwargs) # if this fails, we'll get an exception back to the caller
+                    retval = task(f, **taskkwargscopy)(*args,
+                                                       **kwargs)  # if this fails, we'll get an exception back to the caller
                 else:
                     # either someone tried to do the same thing, or error. Let's try again
                     cont = True
                     tries += 1
-#                     logdebug("About to sleep for %s" % tries)
-#                     sleep(tries)
-            
-            # else we're already scheduled to run far enough into  the future, So, let's just stop
+        #                     logdebug("About to sleep for %s" % tries)
+        #                     sleep(tries)
+
+        # else we're already scheduled to run far enough into  the future, So, let's just stop
         logdebug("leave rundebouncedtask: cont=%s, tries=%s" % (cont, tries))
         return retval
+
     return rundebouncedtask
 
 # def debouncedtask(f=None, initsec = 0, repeatsec = 10, debouncename = None, **taskkwargs):
@@ -161,5 +169,3 @@ def debouncedtask(f=None, initsec = 0, repeatsec = 10, debouncename = None, **ta
 #         logdebug("leave rundebouncedtask")
 #         return retval
 #     return rundebouncedtask
-
-

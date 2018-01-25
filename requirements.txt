@@ -1,5 +1,4 @@
 flask
 cloudpickle
-GoogleAppEngineCloudStorageClient
+googleappenginecloudstorageclient
 google-cloud-storage
-werkzeug==0.12.2
