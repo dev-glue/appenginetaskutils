@@ -1,34 +1,17 @@
 from __future__ import absolute_import
 
-TASKUTILS_LOGGING = False
-TASKUTILS_DUMP = False
+from .__version__ import __title__, __description__, __url__, __version__
+from .__version__ import __build__, __author__, __author_email__, __license__
+from .__version__ import __copyright__
 
-import taskutils.task as taskpy
-from taskutils.task import task, addrouteforwebapp, addrouteforwebapp2, get_taskroute, set_taskroute
-from taskutils.flaskutil import setuptasksforflask
-from flask import Flask
+# Set default logging handler to avoid "No handler found" warnings.
+import logging
 
+try:  # Python 2.7+
+    from logging import NullHandler
+except ImportError:
+    class NullHandler(logging.Handler):
+        def emit(self, record):
+            pass
 
-def set_logging(value):
-    global TASKUTILS_LOGGING
-    TASKUTILS_LOGGING = value
-
-
-def get_logging():
-    global TASKUTILS_LOGGING
-    return TASKUTILS_LOGGING or TASKUTILS_DUMP
-
-
-def set_dump(value):
-    global TASKUTILS_DUMP
-    TASKUTILS_DUMP = value
-
-
-def get_dump():
-    global TASKUTILS_DUMP
-    return TASKUTILS_DUMP
-
-
-app = Flask(__name__)
-
-setuptasksforflask(app)
+logging.getLogger(__name__).addHandler(NullHandler())

@@ -1,7 +1,6 @@
 import functools
-from taskutils.flash import make_flash
+from taskutils.utils import hash_function
 from google.appengine.api import memcache
-from taskutils.util import logdebug
 
 
 # decorator to add caching to a function
@@ -10,7 +9,7 @@ def memcacher(f=None, cachekey=None, expiresec=600):
         return functools.partial(memcacher, cachekey=cachekey, expiresec=expiresec)
 
     def getvalue(*args, **kwargs):
-        lcachekey = cachekey if cachekey else make_flash(f, *args, **kwargs)
+        lcachekey = cachekey if cachekey else hash_function(f, *args, **kwargs)
 
         retval = memcache.get(lcachekey)  # @UndefinedVariable
         if retval is None:
