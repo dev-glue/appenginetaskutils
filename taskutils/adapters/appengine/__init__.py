@@ -1,26 +1,20 @@
 from __future__ import absolute_import
-# noinspection PyPackageRequirements
 from copy import deepcopy
+# noinspection PyPackageRequirements
 from google.appengine.api.taskqueue import taskqueue
-from taskutils.adapters import TaskAdapter
-from taskutils.exceptions import PermanentTaskFailure, SingularTaskFailure
-from taskutils.task import decode_task
+from taskutils.adapters import TaskAdapter, run_task
+from taskutils.exceptions import PermanentTaskFailure, SingularTaskFailure, TaskPermissionError
 from taskutils.utils import decode_function, encode_function
 
 QUEUE_HEADERS = {"Content-Type": "application/octet-stream"}
 DEFAULT_TASK_ROUTE = "/_ah/task"
 
 
-def set_default_route(route):
-    global DEFAULT_TASK_ROUTE
-    DEFAULT_TASK_ROUTE = route
-
-
 def get_default_route():
     return DEFAULT_TASK_ROUTE
 
 
-def _run_task(data, headers=None, request=None, **kwargs):
+def run_appengine_task(data, headers=None, request=None, **task_kwargs):
     """Unpickles and executes a task.
 
     Args:
@@ -31,21 +25,15 @@ def _run_task(data, headers=None, request=None, **kwargs):
       The return value of the function invocation.
 
     """
-    extras = kwargs
     try:
         func, args, kwargs = decode_function(data)
     except Exception as err:
         raise PermanentTaskFailure(err)
     else:
-        if isinstance(extras, dict):
-            if extras.pop("include_headers", None):
-                kwargs["headers"] = headers
-            if extras.pop("include_request", None):
-                kwargs["request"] = request
-            if extras.pop("include_extras", None):
-                kwargs["extras"] = extras
+        if task_kwargs.pop("include_headers", None):
+            kwargs["headers"] = headers
         try:
-            func(*args, **kwargs)
+            result = run_task(func, args, kwargs)
         except SingularTaskFailure:
             raise
         except PermanentTaskFailure:
@@ -53,42 +41,60 @@ def _run_task(data, headers=None, request=None, **kwargs):
         except Exception as err:
             raise PermanentTaskFailure(err)
 
+        return result
+
 
 class AppEngineTaskAdapter(TaskAdapter):
-    # Get base callback url
-    base_route = get_default_route()
 
     def __init__(self, *args, **kwargs):
         super(AppEngineTaskAdapter, self).__init__(*args, **kwargs)
 
         # Get queue and transactional props
-        self.queue = kwargs.pop("queue", "default")
-        self.transactional = kwargs.pop("transactional", False)
-
+        self.queue = self.kwargs.pop("queue", "default")
+        self.transactional = self.kwargs.pop("transactional", False)
         headers = self.kwargs.setdefault("headers", {})
         headers.update(QUEUE_HEADERS)
 
-        # Get extras (passed to unpickle functions)
-        extras = self.kwargs.pop("extras", None)
-        extras = extras if isinstance(extras, dict) else {}
-
         # Update extras with kw args
-        extras.update({k: self.kwargs.pop(k) for k, v in self.kwargs.iteritems() if
-                       k in ['include_headers', 'include_request', 'include_extras'] and v})
-        self.extras = extras
+        if self.kwargs.pop('include_headers', None):
+            self.scope['include_headers'] = True
 
-    def task_options(self, log_name=None):
+    def schedule(self, payload, log_name=None):
+        # Enqueue the task
         task_kwargs = deepcopy(self.kwargs)
         task_kwargs["url"] = ("%s%s" % (self.base_route, "/%s" % log_name if log_name else "")).lower()
-        return task_kwargs
-
-    def run_task(self, encoded_function, log_name=None):
-
-        # Wrap in runner
-        payload = encode_function(_run_task, encoded_function, **self.extras)
-
-        # Enqueue the task
-        t = taskqueue.Task(payload=payload, **self.task_options(log_name=log_name))
+        t = taskqueue.Task(payload=payload, **task_kwargs)
         task = t.add(self.queue, transactional=self.transactional)
-
         return task
+
+    def run(self, func, args, kwargs, **run_kwargs):
+
+        # Encode function to run
+        encoded_function = self.encode_function(func, *args, **kwargs)
+
+        # Wrap in run_request_task (to handle include scopes etc)
+        payload = self.encode_function(run_appengine_task, encoded_function, **self.scope)
+
+        # Schedule on a task queue
+        return self.schedule(payload, log_name=run_kwargs.pop('log_name', None))
+
+    @staticmethod
+    def encode_function(func, *args, **kwargs):
+        return encode_function(func, *args, **kwargs)
+
+    @staticmethod
+    def callback(data, headers=None, **kwargs):
+        headers = headers or {}
+        if not headers.get('X-Appengine-TaskName', None):
+            raise TaskPermissionError('AppEngine scheduled Task must be called from a Push TaskQueue')
+        return run_appengine_task(data, **kwargs)
+
+    @staticmethod
+    def base_route():
+        return get_default_route()
+
+    @staticmethod
+    def callback_route():
+        return "%s/(.*)" % get_default_route()
+
+

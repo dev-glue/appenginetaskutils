@@ -1,8 +1,9 @@
+from __future__ import absolute_import
+
 from datetime import datetime
 import hashlib
 import time
-
-import cloudpickle
+from cloudpickle import cloudpickle
 
 
 def to_unix_timestamp(value, microseconds=None):

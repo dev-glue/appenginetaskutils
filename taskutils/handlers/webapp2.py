@@ -3,36 +3,30 @@ import logging
 # noinspection PyPackageRequirements
 import webapp2
 # noinspection PyPackageRequirements
-from taskutils.exceptions import SingularTaskFailure, PermanentTaskFailure
-from taskutils.handlers import run_task, DEFAULT_STF_MESSAGE, DEFAULT_XSRF_MESSAGE
+from taskutils.exceptions import SingularTaskFailure, PermanentTaskFailure, TaskPermissionError, TaskHandlerError
 from taskutils.task import default_adapter_factory
 
-# noinspection SpellCheckingInspection
-DEFAULT_XSRF_CHECK = None
 
+def add_route(adapter_factory=None, adapter=None):
+    app = webapp2.get_app()
+    # Get adapter (one already created with tasks args) or use adapter_factory or the default adapter factory
+    adapter_factory = adapter or adapter_factory or default_adapter_factory()
 
-class TaskHandler(webapp2.RequestHandler):
+    callback_route = adapter_factory.callback_route()
+    callback = adapter_factory.callback
+
     # noinspection PyUnusedLocal
-    def post(self, name):
+    def task_handler(request, *args, **kwargs):
         # noinspection PyCallingNonCallable
-        if not callable(DEFAULT_XSRF_CHECK) or DEFAULT_XSRF_CHECK(self.request.headers):
-            try:
-                return run_task(self.request.body, headers=self.request.headers, request=self.request)
-            except SingularTaskFailure as e:
-                msg = "%s%s" % (DEFAULT_STF_MESSAGE, ": %s" % e.message if e.message else "")
-                logging.debug(msg)
-                self.abort(408)
-            except PermanentTaskFailure:
-                pass  # ignore
-        else:
-            logging.critical(DEFAULT_XSRF_MESSAGE)
-            self.abort(403)
+        try:
+            return callback(request.body, headers=request.headers)
+        except SingularTaskFailure as e:
+            logging.debug(e.message)
+            webapp2.abort(408)
+        except TaskPermissionError as e:
+            logging.exception(e.message)
+            webapp2.abort(403)
+        except PermanentTaskFailure as e:
+            logging.exception(e.message)
 
-
-def add_route(routes, task_handler=TaskHandler, adapter_factory=None):
-    adapter_factory = adapter_factory or default_adapter_factory()
-
-    def _get_routing_url():
-        return "%s/(.*)" % adapter_factory.base_route
-
-    routes.append((_get_routing_url(), task_handler))
+    app.routes.append((callback_route, task_handler))
