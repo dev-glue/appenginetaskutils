@@ -1,19 +1,20 @@
-# appenginetaskutils
-This is the repo for the appengine task utils library. It generates the appenginetaskutils package 
+# forq
+
+This is the repo for the forq queue based task and future library. It generates the forq package 
 
 ## Install
 
-Use the python package for this library. You can find the package online [here](https://pypi.python.org/pypi/appenginetaskutils).
+Use the python package for this library. You can find the package online [here](https://pypi.python.org/pypi/forq).
 
 Change to your Python App Engine project's root folder and do the following:
 
-> pip install appenginetaskutils --target lib
+> pip install forq --target lib
 
 Or add it to your requirements.txt. You'll also need to set up vendoring, see [app engine vendoring instructions here](https://cloud.google.com/appengine/docs/python/tools/using-libraries-python-27).
 
 ## @task
 
-The most basic element of the taskutils library is task(). This decorator function is designed to be used as a replacement for [deferred](https://cloud.google.com/appengine/articles/deferred).
+The most basic element of the forq library is task(). This decorator function is designed to be used as a replacement for [deferred](https://cloud.google.com/appengine/articles/deferred).
 
 ### Configuring @task
 
@@ -36,7 +37,7 @@ You can import task into your modules like this:
 	
 ### Using task as a decorator
 
-You can take any function and make it run in a separate task, like this:
+You can take any function and make it enqueue in a separate task, like this:
 
 	@task
 	def myfunction():

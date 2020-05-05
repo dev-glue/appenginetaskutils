@@ -1,4 +1,0 @@
-flask
-cloudpickle
-googleappenginecloudstorageclient
-google-cloud-storage

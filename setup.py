@@ -6,16 +6,18 @@ try:
 except ImportError:
     from distutils.core import setup
 
+import forq.__version__ as version
+
 dist = setup(
-    name='appenginetaskutils',
-    version='0.4.3',
-    description='Utilities for using appengine tasks. Inspired by deferred.',
-    author='Emlyn O\'Regan',
-    author_email='emlynoregan@gmail.com',
-    url='https://github.com/emlynoregan/appenginetaskutils',
-    license='LICENSE.txt',
-    packages=['taskutils'],
-    install_requires=['cloudpickle', 'googleappenginecloudstorageclient', 'google-cloud-storage', 'Werkzeug==0.12.2'],
+    name=version.__title__,
+    version=version.__version__,
+    description=version.__description__,
+    author=version.__author__,
+    author_email=version.__autor_email__,
+    url=version.__url__,
+    license='',
+    packages=['forq'],
+    install_requires=['cloudpickle'],
     long_description=open('README.md').read(),
     classifiers=[
         'Development Status :: 3 - Alpha',
