@@ -1,73 +1,86 @@
 import datetime
+import os
 import random
+import sys
 import time
-from multiprocessing import Manager, Pipe, Process
+from collections import Counter
+from multiprocessing import Manager, Pipe, Process, cpu_count
 
 from forq.future.utils.parallel import parallel, FutureParallelTask
+from forq.queue.asynchronous import ProcessQueue
 from forq.store.dictionary import DictStore
 
 
-def _background_store(conn):
-    manager = Manager()
-    multiprocess_storage = manager.dict(__running__=True)
-    conn.send(multiprocess_storage)
-
+def _background_store(storage):
     # Wait till storage is no longer __running__
-    while multiprocess_storage.get('__running__'):
-        time.sleep(1)
 
-    conn.close()
+    while storage.get('__running__'):
+        time.sleep(0.1)
 
 
-def background_store():
+def background_storage_process():
+    manager = Manager()
+    storage = manager.dict(__running__=True)
 
-    parent_conn, child_conn = Pipe()
-    p = Process(target=_background_store, args=(child_conn,))
-    p.start()
-    storage = parent_conn.recv()
-    parent_conn.close()
-    store = DictStore(key="root", storage=storage)
-    store.process = p
-    return store
+    process = Process(target=_background_store, args=(storage,))
+    process.start()
 
+    return storage, process
+
+
+def compare(s, t):
+    return Counter(s) == Counter(t)
 
 def test_future_parallel():
 
-    def async_task(item, index, items, *args, **kwargs):
-        time.sleep(random.randrange(2, 10))
-        print "\nASYNC PARALLEL"
+    def async_task(item, *args, **kwargs):
+        # print "\nASYNC PARALLEL"
         # print"\nARGS:%s\nKWARGS:%s" % (args, kwargs)
-        print "Item %s at %s" % (item, datetime.datetime.utcnow())
+        # print "Item %s (%s of %s) at %s" % (item, index+1, len(items), datetime.datetime.utcnow())
         return item * item
 
     def success(*args, **kwargs):
-        print "\nSUCCESS"
+        # print "\nSUCCESS"
         # print"\nARGS:%s\nKWARGS:%s" % (args, kwargs)
         result = kwargs.get('result')
-        print list(result)
+        # print list(result)
+        pf = kwargs.get('future')
+        if pf:
+            # Short circuit standard clear
+            def noop(*args, **kwargs):
+                pass
+            pf.store.clear = noop
+            pf.store.set('result', list(result))
 
     def always(*args, **kwargs):
-        print "\nALWAYS"
+        # print "\nALWAYS"
         # print"\nARGS:%s\nKWARGS:%s" % (args, kwargs)
         pf = kwargs.get('future')
         if pf:
             pf.store.storage['__running__'] = False
 
-    store = background_store()
+    storage, storage_process = background_storage_process()
+    cpus = cpu_count()
+    queue = ProcessQueue(processes=cpus)
+    store = DictStore(key="root", storage=storage)
 
-    f = parallel(async_task, items=[1, 2, 3], concurrency=1, store=store)
-    if isinstance(f, FutureParallelTask):
-        f.success(success).always(always)
+    items = range(3000)
+    r = [async_task(i) for i in items]
+    f = parallel(async_task, items=items, store=store, concurrency=cpus, queue=queue)  # type: FutureParallelTask
+    f.success(success).always(always)
 
-    p = f()
-    assert isinstance(p, Process)
-    p.join()
-    assert p.exitcode == 0
+    f()
 
     # Wait for the store to complete
-    store.process.join(timeout=30)
+    storage_process.join(timeout=300)
+    if storage_process.is_alive():
+        storage_process.terminate()
 
-    if store.process.is_alive():
-        store.process.terminate()
+    async_r = store.get('result')
+    assert compare(r, async_r)
 
-    print "Done"
+    if queue.pool:
+        queue.pool.terminate()
+        queue.pool.join()
+
+    print "\n%s" % r

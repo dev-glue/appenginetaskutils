@@ -1,35 +1,43 @@
 import functools
+import logging
 
 from forq.future import make_future, run_future, expires
 from forq.future.utils.sequence import FutureSequence, FutureSequenceTaskDecorator, FutureSequenceTask
 from forq.store import Store
-from forq.utils import chunks, iterchunks
+from forq.utils import chunks, iterchunks, split
 
 
-def make_future_parallel(state):
-    return make_future(state, factory=FutureParallel)
+def make_future_parallel(store_state, queue_state, **extra_kwargs):
+    return make_future(store_state, queue_state, factory=FutureParallel, **extra_kwargs)
 
 
-def sequence_callback(state, count, sequence_id, *args, **kwargs):
-    # Setup all context
-    kwargs['sequence_id'] = sequence_id
-    kwargs['sequence'] = kwargs.pop('future', None)
-    error = kwargs['sequence_error'] = kwargs.pop('error', None)
-    kwargs['sequence_status'] = 'error' if error else 'success'
+def sequence_callback(state, sequence_id, *args, **kwargs):
+    try:
+        # Setup all context
+        kwargs['sequence_id'] = sequence_id
+        sequence = kwargs['sequence'] = kwargs.pop('future', None)
+        error = kwargs['sequence_error'] = kwargs.pop('error', None)
+        status = kwargs['sequence_status'] = 'error' if error else 'success'
 
-    #  for r in iter(kwargs.pop('result', [])):
-    sequence_result = list(kwargs.pop('result', []))
+        #  for r in iter(kwargs.pop('result', [])):
+        sequence_result = list(kwargs.pop('result', []))
 
-    # Get original future
-    f = FutureParallel.from_state(state)
-    f.store.set("result_%s" % sequence_id, sequence_result)
-    c = f.store.counter('sequences')
-    t = c.inc()
-    if t >= count:
-        result = f._result(count)
-        # Run the future
-        f.run(result, [], {})
+        # Get original future
+        f = FutureParallel.from_state(state)
+        sequences = f.store.get("__sequences__") or 1
+        f.store.set("result_%s" % sequence_id, sequence_result)
+        f.store.set("status_%s" % sequence_id, status)
+        # f.store.set("error_%s" % sequence_id, error)
+        # f.store.set("sequence_%s" % sequence_id, future)
 
+        c = f.store.counter('__completed__')
+        t = c.inc()
+        if t >= sequences:
+            result = f._result(sequences)
+            # Run the future
+            f.run(result, args, kwargs)
+    except Exception as err:
+        logging.error("Unable to handle call back")
 
 class ParallelResult(object):
     def __init__(self, store, limit, batch_size):
@@ -53,7 +61,7 @@ def collate_results(*args, **kwargs):
 class FutureParallel(FutureSequence):
     """ Similar to map but uses locks to manage concurrency """
     def __init__(self, *args, **kwargs):
-        self.concurrency = kwargs.pop("concurrency") or 1
+        self.concurrency = kwargs.pop("concurrency", None)
 
         # Setup Future
         super(FutureParallel, self).__init__(*args, **kwargs)
@@ -64,7 +72,8 @@ class FutureParallel(FutureSequence):
 
     def start(self, func, *args, **kwargs):
         # Collate parts
-        parts = [items for items in chunks(self.items, self.concurrency)]
+        parts = [items for items in split(self.items, self.concurrency)]
+        self.store.set("__sequences__", len(parts))
 
         # Save the initial Future object to its store so it can be recovered
         self.save()
@@ -74,7 +83,7 @@ class FutureParallel(FutureSequence):
         for sequence_id, items in enumerate(parts):
 
             # Create a callback
-            callback = functools.partial(sequence_callback, state, len(parts), sequence_id)
+            callback = functools.partial(sequence_callback, state, sequence_id)
 
             # Create the FutureSequenceTask of the split
             ft = FutureSequenceTask(

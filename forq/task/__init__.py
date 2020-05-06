@@ -137,9 +137,9 @@ class Task(object):
 
         # Add encoded task to be run by run_encoded_task once coming off the queue
         if self.include_context:
-            return queue.add(run_encoded_task_with_context, encoded_task, *self._args, **self._kwargs)
+            queue.add(run_encoded_task_with_context, encoded_task, *self._args, **self._kwargs)
         else:
-            return queue.add(run_encoded_task, encoded_task)
+            queue.add(run_encoded_task, encoded_task)
 
 
 class TaskDecorator(object):

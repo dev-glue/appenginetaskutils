@@ -1,12 +1,11 @@
 from __future__ import absolute_import
 
 import collections
-import functools
-import threading
-
-from datetime import datetime
 import hashlib
+import logging
+import threading
 import time
+from datetime import datetime
 from itertools import islice, chain
 
 from cloudpickle import cloudpickle
@@ -57,8 +56,8 @@ def decode(pickled_data):
     try:
         # Should return a tuple (args, kwargs)
         return cloudpickle.loads(pickled_data)
-    except Exception:
-        pass
+    except Exception as e:
+        logging.error('Unable to decode')
 
 
 def hash_id(id_value):
@@ -73,6 +72,13 @@ def chunks(l, n):
     """
     for i in xrange(0, len(l), n):
         yield l[i:i + n]
+
+
+def split(a, n):
+    ln = len(a)
+    p = max(1, min(n or ln, ln))
+    k, m = divmod(ln, p)
+    return (a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in xrange(p))
 
 
 # noinspection SpellCheckingInspection

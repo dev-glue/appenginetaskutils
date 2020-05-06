@@ -6,8 +6,8 @@ from forq.store import Store
 from forq.utils import encode_function, iterchunks, decode_function
 
 
-def make_future_sequence(state, **extra_kwargs):
-    return make_future(state, factory=FutureSequence, **extra_kwargs)
+def make_future_sequence(store_state, queue_state, **extra_kwargs):
+    return make_future(store_state, queue_state, factory=FutureSequence, **extra_kwargs)
 
 
 class SequenceResult(object):
@@ -93,7 +93,10 @@ class FutureSequence(Future):
 
                     if cf.func != func and callable(cf.func):
                         kwargs['_sequence_continue'] = encode_function(cf.func, *cf.args, **cf.kwargs)  # Original func is always preserved in sequence
-                    break  # We stop the batch here and let the index < limit trigger a future function from the same point on
+                    # We stop the batch here and let the index < limit trigger a future function from the same point on
+                    kwargs['_sequence_index'] = index
+                    kwargs['_sequence_limit'] = limit
+                    raise ContinueFuture(func, *args, **kwargs)
                 except Exception as er:
                     raise er
                 self.store.set('result_%s' % current, result)

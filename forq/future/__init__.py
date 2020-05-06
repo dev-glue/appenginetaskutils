@@ -1,5 +1,6 @@
 import datetime
 import logging
+import sys
 
 from forq.exceptions import PermanentTaskFailure, SingularTaskFailure, IgnoredTaskFailure
 from forq.future.exceptions import ContinueFuture
@@ -27,12 +28,13 @@ def run_future(state, encoded_func, *args, **context):
         func = encoded_func
         args = []
         kwargs = {}
-    return f.run(func, args, kwargs, **context)
+    f.run(func, args, kwargs, **context)
 
 
-def make_future(state, factory=None, **extra_kwargs):
+def make_future(store_state, queue_state, factory=None, **extra_kwargs):
 
-    store = Store.from_state(state)
+    store = Store.from_state(store_state)
+    queue = Store.from_state(queue_state)
     # Prep data
     kwargs = store.get('future')
     if kwargs:
@@ -41,7 +43,7 @@ def make_future(state, factory=None, **extra_kwargs):
         kwargs.update(extra_kwargs)
         factory = factory or Future
         # Re-create future if available
-        return factory(store=store, *args, **kwargs)
+        return factory(*args, store=store, queue=queue, **kwargs)
 
 
 def expires(timeout):
@@ -84,6 +86,7 @@ class Future(object):
     def to_dict(self):
         d = self.__dict__.copy()
         d.pop('store', None)
+        d.pop('queue', None)
         return d
 
     @classmethod
@@ -96,6 +99,7 @@ class Future(object):
 
     def save(self):
         d = self.to_dict()
+
         self.store.set('future', d)
 
     def clear(self):
@@ -119,7 +123,7 @@ class Future(object):
             self._callback('fail', *args, **kwargs)
 
     def to_state(self):
-        return encode_function(self.constructor(), self.store.to_state())
+        return encode_function(self.constructor(), self.store.to_state(), self.queue.to_state())
 
     def _callback(self, key, *args, **kwargs):
         for handler in flatten(self.callbacks.get(key, None) or []):
@@ -169,6 +173,7 @@ class Future(object):
                     self.enqueue(func, *cf.args, **cf.kwargs)
                     error = None
                     completed = False
+                    return
                 except Exception as err:
                     error = err
                     completed = False

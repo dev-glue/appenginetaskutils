@@ -1,6 +1,7 @@
 import uuid
 
 from forq.exceptions import TaskContextError, TaskNotImplementedError
+from forq.utils import decode_function
 
 
 class BaseQueue(object):
@@ -20,9 +21,16 @@ class BaseQueue(object):
     def factory(self):
         return self.__class__
 
-    @property
-    def store(self):
-        raise TaskNotImplementedError
+    def to_state(self):
+        raise TaskNotImplementedError()
+
+    @classmethod
+    def from_state(cls, state):
+        # noinspection PyBroadException
+        func, args, kwargs = decode_function(state)
+        if func:
+            # noinspection PyUnboundLocalVariable
+            return func(*args, **kwargs)
 
 
 class Queue(BaseQueue):
@@ -39,6 +47,8 @@ class Queue(BaseQueue):
     def add(self, func, *args, **kwargs):
         if callable(func):
             func(*args, **kwargs)  # TODO make this run async
+
+
 
 
 # TODO: Threaded queue
